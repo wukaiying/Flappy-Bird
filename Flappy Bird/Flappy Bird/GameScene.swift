@@ -6,6 +6,8 @@
 //  Copyright (c) 2015年 pmst. All rights reserved.
 //
 
+//难点小鸟穿越柱子并计分这个点没有搞清楚
+
 import SpriteKit
 
 enum 图层: CGFloat {
@@ -14,6 +16,7 @@ enum 图层: CGFloat {
     case 障碍物    //障碍物在背景和前景的中间夹着
     case 前景
     case 游戏角色
+    case UI
 }
 
 enum 游戏状态 {
@@ -42,6 +45,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
     
     let k首次生成障碍延迟: NSTimeInterval = 1.75
     let k每次重生障碍延迟: NSTimeInterval = 1.5
+    
+    //顶部得分标签
+    let k顶部留白: CGFloat = 20.0
+    let k字体名字 = "AmericanTypewriter-Bold"
+    var 得分标签: SKLabelNode!
+    var 当前分数: Int = 0
+    
     
     let 世界单位 = SKNode()
     var 游戏区域起始点: CGFloat = 0
@@ -87,6 +97,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
         设置前景()
         设置主角()
         设置帽子()
+        设置得分标签()
         无限重生障碍()
     }
     
@@ -163,10 +174,76 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
         主角.addChild(帽子)
     }
     
+    //
+    func 设置得分标签() {
+        得分标签 = SKLabelNode(fontNamed: k字体名字)
+        得分标签.fontColor = SKColor(red: 101.0/255.0, green: 71.0/255.0, blue: 73.0/255.0, alpha: 1.0)
+        得分标签.position = CGPoint(x: size.width/2, y: size.height-k顶部留白)//居中
+        得分标签.verticalAlignmentMode = .Top //垂直对齐
+        得分标签.text = "0"
+        得分标签.zPosition = 图层.UI.rawValue
+        世界单位.addChild(得分标签)
+
+    }
+    
+    //设置计分板
+    func 设置计分板() {
+        if 当前分数 > 最高分() {
+            设置最高分(当前分数)
+        }
+        
+        let 计分板 = SKSpriteNode(imageNamed: "ScoreCard")
+        计分板.position = CGPoint(x: size.width/2, y: size.height/2)
+        计分板.zPosition = 图层.UI.rawValue
+        世界单位.addChild(计分板)
+        
+        let 当前分数标签 = SKLabelNode(fontNamed: k字体名字)
+        当前分数标签.fontColor = SKColor(red: 101.0/255.0, green: 71.0/255.0, blue: 73.0/255.0, alpha: 1.0)
+        当前分数标签.position = CGPoint(x: -计分板.size.width/4, y: -计分板.size.height/3)
+        当前分数标签.text = "\(当前分数)"
+        当前分数标签.zPosition = 图层.UI.rawValue
+        计分板.addChild(当前分数标签)
+        
+        let 最高分标签 = SKLabelNode(fontNamed: k字体名字)
+        最高分标签.fontColor = SKColor(red: 101.0/255.0, green: 71.0/255.0, blue: 73.0/255.0, alpha: 1.0)
+        最高分标签.position = CGPoint(x: 计分板.size.width/4, y: -计分板.size.height/3)
+        最高分标签.text = "\(最高分())"
+        最高分标签.zPosition = 图层.UI.rawValue
+        计分板.addChild(最高分标签)
+        
+        let 游戏结束 = SKSpriteNode(imageNamed: "GameOver")
+        游戏结束.position = CGPoint(x: size.width/2, y: size.height/2+计分板.size.height/2+k顶部留白+游戏结束.size.height/2)
+        游戏结束.zPosition = 图层.UI.rawValue
+        世界单位.addChild(游戏结束)
+        
+        let ok按钮 = SKSpriteNode(imageNamed: "Button")
+        ok按钮.position = CGPoint(x: size.width/4, y: size.height/2-计分板.size.height/2-k顶部留白-ok按钮.size.height/2)
+        ok按钮.zPosition = 图层.UI.rawValue
+        世界单位.addChild(ok按钮)
+        
+        let ok = SKSpriteNode(imageNamed: "OK")
+        ok.position = CGPoint.zero
+        ok.zPosition = 图层.UI.rawValue
+        ok按钮.addChild(ok)
+        
+        let 分享按钮 = SKSpriteNode(imageNamed: "ButtonRight")
+        分享按钮.position = CGPoint(x: size.width*0.75, y: size.height/2-计分板.size.height/2-k顶部留白-分享按钮.size.height/2)
+        分享按钮.zPosition = 图层.UI.rawValue
+        世界单位.addChild(分享按钮)
+        
+        let 分享 = SKSpriteNode(imageNamed: "Share")
+        分享.position = CGPoint.zero
+        分享.zPosition = 图层.UI.rawValue
+        分享按钮.addChild(分享)
+        
+    }
+    
     //游戏流程
     func 创建障碍物(图片名: String) -> SKSpriteNode {
         let 障碍物 = SKSpriteNode(imageNamed: 图片名)
         障碍物.zPosition = 图层.障碍物.rawValue
+        
+        障碍物.userData = NSMutableDictionary()
         
         //为障碍物添加碰撞体积
         let offsetX = 障碍物.size.width * 障碍物.anchorPoint.x
@@ -296,6 +373,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
             更新前景()
             撞击障碍物检查()
             撞击地面检查()
+            更新得分()
             break
         case .结束:
             break
@@ -349,6 +427,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
         }
     }
     
+    func 更新得分() {
+        //查找游戏元素
+        世界单位.enumerateChildNodesWithName("顶部障碍", usingBlock: {匹配单位, _ in
+            if let 障碍物 = 匹配单位 as? SKSpriteNode {
+                if let 已通过 = 障碍物.userData?["已通过"] as? NSNumber {
+                    if 已通过.boolValue {
+                        return
+                    }
+                }
+                if self.主角.position.x > 障碍物.position.x + 障碍物.size.width/2 {
+                    self.当前分数 += 1
+                    self.得分标签.text = "\(self.当前分数)"
+                    self.runAction(self.coinAction)
+                    障碍物.userData?["已通过"] = NSNumber(bool: true)
+                }
+            }
+            
+        })
+    }
     //MARK: 游戏状态
     func 切换到跌落状态() {
         当前游戏状态 = .跌落
@@ -369,7 +466,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate{//遵守碰撞协议
         当前游戏状态 = .显示分数
         主角.removeAllActions()
         停止重生障碍()
+        设置计分板()
     }
+    
+    //MARK: 分数
+    //将最高分存入userdefault
+    func 最高分() -> Int {
+        return NSUserDefaults.standardUserDefaults().integerForKey("最高分")
+    }
+    
+    func 设置最高分(最高分: Int) {
+        NSUserDefaults.standardUserDefaults().setInteger(最高分, forKey: "最高分")
+        NSUserDefaults.standardUserDefaults().synchronize()
+    }
+    
+    
     
     //MARK: 物理引擎，碰撞代理,代理跟接口差不多，继承接口，可以使用里面的方法，自己随意更改
     func didBeginContact(碰撞双方: SKPhysicsContact) {
